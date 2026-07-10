@@ -257,7 +257,7 @@ DATA.customers.filter(c=>c.lat&&c.lng).forEach(c=>{
  m.bindPopup(`<div class="pp"><b>${c.name}</b><br>${badge(c.status)} · ${c.market||''}<br>
    Lifetime ${fmt$(c.total)} · ${c.orders} orders<br>Last order ${c.last||'—'} (${c.days_since_last==null?'—':c.days_since_last+'d ago'})<br>
    ${c.email?`<a href="mailto:${c.email}">${c.email}</a>`:'<span class="muted">no email</span>'}
-   ${c.last_contacted?'<br><span class="tick">✓ emailed '+c.last_contacted+'</span>':''}</div>`);
+   ${lastOut(c)?'<br><span class="tick">✓ emailed '+lastOut(c)+'</span>':''}</div>`);
  m.on('click',()=>{}); m._cid=c.id;
  layers[c.status].addLayer(m); pts.push([c.lat,c.lng]);
 });
@@ -277,6 +277,8 @@ function list(){
   if(q&&!(c.name+' '+(c.email||'')+' '+(c.market||'')+' '+(c.address||'')).toLowerCase().includes(q))return false; return true;});
  L.sort((a,b)=>{const x=kv(a,sortK),y=kv(b,sortK);return x<y?-dir:x>y?dir:0;}); return L;
 }
+// unified "last outreach" = most recent of pre-loaded Outreach Log (last_contacted) and in-app sends (reached)
+function lastOut(c){const a=c.last_contacted||'',b=c.reached||'';const d=a>b?a:b;return d||'';}
 function rowsHTML(L){return L.map(c=>`<tr data-i="${DATA.customers.indexOf(c)}">
  <td><div class="cn">${c.name}</div><div class="cmeta">${c.email||c.address||''}</div></td>
  <td><span class="ft"><span class="dot" style="background:${MKTCOL[mki(c.market)%MKTCOL.length]}"></span>${c.market||'—'}</span></td>
@@ -284,7 +286,7 @@ function rowsHTML(L){return L.map(c=>`<tr data-i="${DATA.customers.indexOf(c)}">
  <td class="num"><b>${fmt$(c.total)}</b></td><td class="num">${fmt$(c.avg)}</td>
  <td class="num ft">${c.cadence==null?'—':c.cadence+'d'}</td><td class="ft">${c.last||'—'}</td>
  <td class="num">${c.days_since_last==null?'—':c.days_since_last}</td><td>${badge(c.status)}</td>
- <td class="ft">${c.last_contacted?'<span class="tick">✓ '+c.last_contacted.slice(5)+'</span>':'—'}</td></tr>`).join('');}
+ <td class="ft">${lastOut(c)?'<span class="tick">✓ '+lastOut(c).slice(5)+'</span>':'—'}</td></tr>`).join('');}
 function render(){const L=list();$('#rows').innerHTML=rowsHTML(L);
  $('#tcount').textContent=`— ${L.length} of ${DATA.customers.length}`;
  $('#showing').textContent=`${L.length} shown · ${fmt$(L.reduce((s,c)=>s+c.total,0))} · ${L.filter(c=>c.email).length} emails`;
@@ -313,7 +315,7 @@ $('#churnrows').innerHTML=churn.map(c=>`<tr data-i="${DATA.customers.indexOf(c)}
  <td class="ft">${c.market||'—'}</td><td class="num"><b>${fmt$(c.total)}</b></td><td class="num">${c.orders}</td>
  <td class="ft">${c.last||'—'}</td><td class="num">${c.days_since_last==null?'—':c.days_since_last}</td>
  <td>${badge(c.status)}</td><td class="ft">${c.email||'<span style="color:#ff7b7b">add</span>'}</td>
- <td class="ft">${c.last_contacted?'<span class="tick">✓ '+c.last_contacted.slice(5)+'</span>':(c.reached?'<span class="tick">✓ '+c.reached.slice(5)+'</span>':'—')}</td>
+ <td class="ft">${lastOut(c)?'<span class="tick">✓ '+lastOut(c).slice(5)+'</span>':'—'}</td>
  <td><button class="btn" style="padding:5px 10px;font-size:11px" onclick="event.stopPropagation();openCompose(${DATA.customers.indexOf(c)})">✉ ${c.email?'Email':'Enrich'}</button></td></tr>`).join('');
 bindRows('#churnrows');}
 renderChurn();
@@ -374,7 +376,7 @@ function openCompose(i){
  $('#cf_copy').onclick=e=>copy($('#cf_body').value,e.target);
  $('#cov').classList.add('on');
 }
-function markReached(c){const d=new Date().toISOString().slice(0,10);c.reached=d;saveEnrich(c.id,{reached:d});}
+function markReached(c){const n=new Date();const d=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');c.reached=d;saveEnrich(c.id,{reached:d});}
 function closeC(){$('#cov').classList.remove('on');}
 $('#cov').onclick=e=>{if(e.target.id==='cov')closeC();};
 
@@ -385,7 +387,7 @@ function openModal(i){const c=DATA.customers[i];
  const months=Object.keys(c.monthly||{}).sort();
  const ol=[...(c.order_list||[])].sort((a,b)=>b.date.localeCompare(a.date));
  $('#modal').innerHTML=`<div class="mhd"><div><div style="font-size:19px;font-weight:800">${c.name}</div>
-   <div class="muted" style="font-size:12px;margin-top:3px">${c.market||''} · ${badge(c.status)} ${c.last_source?'· last seen '+c.last_source:''} ${c.last_contacted?'· <span class="tick">✓ emailed '+c.last_contacted+'</span>':''}</div></div>
+   <div class="muted" style="font-size:12px;margin-top:3px">${c.market||''} · ${badge(c.status)} ${c.last_source?'· last seen '+c.last_source:''} ${lastOut(c)?'· <span class="tick">✓ emailed '+lastOut(c)+'</span>':''}</div></div>
    <button class="btn gm" style="margin-left:auto" onclick="openCompose(${i})">✉ Email / Enrich</button>
    <button class="x" onclick="closeM()">×</button></div>
   <div class="mbody"><div class="mgrid">
