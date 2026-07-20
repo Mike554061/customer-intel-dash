@@ -195,7 +195,7 @@ function applyEnrich(){DATA.customers.forEach(c=>{const e=ENRICH[c.id]; if(!e)re
  if(e.notes)c.notes=e.notes; if(e.reached)c.reached=e.reached;});}
 applyEnrich();
 // ── Shared outreach log (team-wide, persisted via the Live Order Dash Sheets endpoint) ──
-const OUTREACH_ENDPOINT='https://script.google.com/macros/s/AKfycbzN5ajksESOTMEorcNSHnCKF0Qo0MIRsNFquVn8_eH570PbLc14RQPPTxA23P9AFeNY/exec';
+const OUTREACH_ENDPOINT='https://script.google.com/macros/s/AKfycbz4ial75YjPQODBlfOFZJJWeRDQn7MI9KT6UrfKUGkR1VAHhy7Ns07y1QT_tqfl2D1L/exec';
 let OUTREACH={};      // customerId -> [{date,channel,subject,ts,by}]
 let OUTREACH_URL='';  // link to the shared Google Sheet
 function jsonp(url,cb){var s=document.createElement('script');var fn='__jp'+Math.random().toString(36).slice(2);window[fn]=function(d){try{cb(d);}catch(e){}try{delete window[fn];}catch(_){}try{s.remove();}catch(_){}};s.onerror=function(){try{delete window[fn];}catch(_){}try{s.remove();}catch(_){}};s.src=url+(url.indexOf('?')<0?'?':'&')+'callback='+fn;document.head.appendChild(s);}
