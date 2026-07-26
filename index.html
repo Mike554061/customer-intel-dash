@@ -202,6 +202,8 @@ function jsonp(url,cb){var s=document.createElement('script');var fn='__jp'+Math
 function outreachList(c){return (OUTREACH[c.id]||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));}
 function loadOutreach(){ if(!OUTREACH_ENDPOINT)return; jsonp(OUTREACH_ENDPOINT+'?mode=outreach_get',function(d){ if(!d||!d.ok||!d.rows)return; if(d.url)OUTREACH_URL=d.url; var m={}; d.rows.forEach(function(r){ if(!r.id||r.id==='TEST123'||/^ZZ_/i.test(r.id))return; (m[r.id]=m[r.id]||[]).push(r); }); OUTREACH=m; DATA.customers.forEach(function(c){ var rr=OUTREACH[c.id]; if(rr&&rr.length){ var latest=rr.reduce(function(x,y){return (y.date||'')>x?(y.date):x;},''); if(latest&&(!c.reached||latest>c.reached))c.reached=latest; } }); try{render();renderChurn();}catch(e){} }); }
 function logOutreach(c,channel,subject){ if(!OUTREACH_ENDPOINT||!c)return; var d=(c.reached||''); (OUTREACH[c.id]=OUTREACH[c.id]||[]).push({date:d,channel:channel||'email',subject:subject||'',ts:d,by:''}); var u=OUTREACH_ENDPOINT+'?mode=outreach_log&id='+encodeURIComponent(c.id)+'&name='+encodeURIComponent(c.name||'')+'&email='+encodeURIComponent(c.email||'')+'&date='+encodeURIComponent(d)+'&channel='+encodeURIComponent(channel||'email')+'&subject='+encodeURIComponent(subject||''); jsonp(u,function(){}); }
+function pushEnrich(cid){ if(!OUTREACH_ENDPOINT||!cid)return; var e=ENRICH[cid]||{}; var c=(DATA.customers.find(function(x){return x.id===cid;})||{}); var u=OUTREACH_ENDPOINT+'?mode=enrich_set&id='+encodeURIComponent(cid)+'&name='+encodeURIComponent(c.name||'')+'&email='+encodeURIComponent(e.email||'')+'&contact='+encodeURIComponent(e.contact||'')+'&phone='+encodeURIComponent(e.phone||'')+'&address='+encodeURIComponent(e.address||'')+'&notes='+encodeURIComponent(e.notes||''); jsonp(u,function(){}); }
+function loadEnrich(){ if(!OUTREACH_ENDPOINT)return; jsonp(OUTREACH_ENDPOINT+'?mode=enrich_get',function(d){ if(!d||!d.ok||!d.enrich)return; Object.keys(d.enrich).forEach(function(id){ var s=d.enrich[id]||{}; var clean={}; ['email','contact','phone','address','notes'].forEach(function(k){ if(s[k])clean[k]=s[k]; }); ENRICH[id]=Object.assign({}, ENRICH[id]||{}, clean); }); applyEnrich(); try{render();renderChurn();}catch(e){} }); }
 function saveEnrich(cid,obj){ENRICH[cid]=Object.assign(ENRICH[cid]||{},obj);
  LS(function(){localStorage.setItem('sn_enrich',JSON.stringify(ENRICH));});
  if(BACKEND){try{google.script.run.withFailureHandler(function(){}).saveEnrichment(cid,ENRICH[cid]);}catch(e){}}}
@@ -376,7 +378,7 @@ function openCompose(i){
  $('#cf_body').value=composeBody(c);
  $('#cf_reset').onclick=e=>{e.preventDefault();$('#cf_body').value=composeBody({...c,contact:$('#cf_contact').value.trim()});};
  const collect=()=>({contact:$('#cf_contact').value.trim(),email:$('#cf_email').value.trim().toLowerCase(),phone:$('#cf_phone').value.trim(),address:$('#cf_addr').value.trim(),notes:$('#cf_notes').value.trim()});
- const persist=()=>{const v=collect();Object.assign(c,v);saveEnrich(c.id,v);};
+ const persist=()=>{const v=collect();Object.assign(c,v);saveEnrich(c.id,v);pushEnrich(c.id);};
  const need=()=>{$('#cf_msg').style.color='#ff9b9b';$('#cf_msg').textContent='Add an email first';setTimeout(()=>$('#cf_msg').style.color='',1800);};
  $('#cf_save').onclick=()=>{persist();$('#cf_msg').textContent='Saved ✓';render();renderChurn();};
  $('#cf_gmail').onclick=()=>{persist();if(!c.email)return need();markReached(c);logOutreach(c,'email',$('#cf_subj').value);window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(c.email)}&su=${encodeURIComponent($('#cf_subj').value)}&body=${encodeURIComponent($('#cf_body').value)}`,'_blank');$('#cf_msg').textContent='Opened in Gmail ✓ · logged';render();renderChurn();};
@@ -424,6 +426,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeM();closeC();}
 
 render();
 loadOutreach();
+loadEnrich();
 document.querySelector('#tbl thead th[data-k="total"]').innerHTML+='<span class="ar"> ▼</span>';
 [200,600,1200].forEach(t=>setTimeout(()=>map.invalidateSize(),t));
 window.addEventListener('resize',()=>map.invalidateSize());
