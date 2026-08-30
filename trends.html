@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SupplyNow · Live Customer Trends</title>
+<style>
+:root{--bg:#0e0f12;--panel:#181a1f;--panel2:#1f2229;--line:#2a2e37;--ink:#e8eaed;--mut:#9aa0ab;--mut2:#6b7280;--orange:#f5a623;--green:#16a765;--blue:#4986e7;--red:#ff2d2d;--purple:#9b59b6}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,Helvetica,sans-serif;font-size:14px;line-height:1.45}
+.wrap{max-width:1360px;margin:0 auto;padding:0 20px 90px}
+header{background:linear-gradient(180deg,#111,#0e0f12);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:500}
+.hd{max-width:1360px;margin:0 auto;padding:15px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.logo{font-size:22px;font-weight:800;letter-spacing:.5px}.logo .s{color:var(--orange)}.logo .n{color:#fff}
+.logo .tag{color:var(--mut);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:2px;margin-left:10px}
+.asof{color:var(--mut);font-size:12px}
+.spacer{margin-left:auto}
+.navlink,.btn{display:inline-flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);color:var(--ink);text-decoration:none;font-size:12px;font-weight:700;padding:8px 13px;border-radius:8px;white-space:nowrap;cursor:pointer}
+.navlink:hover,.btn:hover{border-color:var(--orange);color:var(--orange)}
+h2{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--mut);margin:30px 0 12px;border-bottom:1px solid var(--line);padding-bottom:8px}
+h2 .cnt{color:var(--mut2);font-weight:600;margin-left:8px;letter-spacing:0;text-transform:none}
+.kpis{display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-top:22px}
+@media(max-width:1080px){.kpis{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:620px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.kpi .v{font-size:21px;font-weight:800;letter-spacing:-.5px}
+.kpi .l{font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.7px;margin-top:3px}
+.kpi .d{font-size:11px;font-weight:700;margin-top:5px}
+.up{color:#3ddc9a}.down{color:#ff6a5f}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:4px 2px 8px}
+.card h3{font-size:13px;font-weight:800;margin:14px 16px 8px}
+.card h3 span{color:var(--mut);font-weight:600;font-size:11px}
+table{width:100%;border-collapse:collapse}
+th{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut);text-align:left;padding:8px 14px;border-bottom:1px solid var(--line)}
+th.num{text-align:right}
+td{padding:8px 14px;border-bottom:1px solid var(--line);font-size:12.5px;font-variant-numeric:tabular-nums}
+td.num{text-align:right}
+tr:last-child td{border-bottom:none}
+.cn{font-weight:700}.sub{color:var(--mut2);font-size:11px}
+.pos{color:#3ddc9a;font-weight:700}.neg{color:#ff6a5f;font-weight:700}
+.bar{display:flex;align-items:center;gap:10px;padding:7px 16px}
+.bar .nm{width:120px;color:var(--ink);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .track{flex:1;background:var(--panel2);border-radius:5px;height:18px;overflow:hidden}
+.bar .fill{display:block;height:100%;border-radius:5px}
+.bar .vv{width:150px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums}
+.pill{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;margin-left:6px}
+.note{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--orange);border-radius:0 8px 8px 0;padding:14px 18px;font-size:13px;color:var(--mut);margin:26px 0 0}
+.note b{color:var(--ink)} .note ol{margin:8px 0 0;padding-left:20px} .note li{margin:4px 0}
+.muted{color:var(--mut)}
+#loading{padding:60px 0;text-align:center;color:var(--mut)}
+.empty{padding:16px;color:var(--mut2);font-size:12px}
+</style>
+</head>
+<body>
+<header><div class="hd">
+  <div><span class="logo"><span class="s">SUPPLY</span><span class="n">NOW</span><span class="tag">Live Customer Trends</span></span></div>
+  <div class="asof" id="asof"></div>
+  <div class="spacer"></div>
+  <a class="navlink" href="./">💵 Customer Intel</a>
+  <button class="btn" id="refresh">↻ Refresh</button>
+</div></header>
+<div class="wrap">
+  <div id="loading">Loading live order data…</div>
+  <div id="app" style="display:none">
+    <div class="kpis" id="kpis"></div>
+
+    <h2>🏆 Who we've won <span class="cnt" id="wonc"></span></h2>
+    <div class="grid2">
+      <div class="card"><h3>New customers <span>· first-ever order, last 30 days · identified by email</span></h3><div id="newc"></div></div>
+      <div class="card"><h3>Won back <span>· returned after a gap</span></h3><div id="won"></div></div>
+    </div>
+
+    <h2>📈 Who's trending</h2>
+    <div class="grid2">
+      <div class="card"><h3>Heating up <span>· last 30d vs prior 30d spend</span></h3><div id="up"></div></div>
+      <div class="card"><h3>Cooling off <span>· slowing down — worth a call</span></h3><div id="down"></div></div>
+    </div>
+
+    <h2>🔥 What's trending <span class="cnt">last 30 days vs prior 30</span></h2>
+    <div class="grid2">
+      <div class="card"><h3>By market</h3><div id="loc"></div></div>
+      <div class="card"><h3>By fulfillment</h3><div id="ful"></div></div>
+    </div>
+
+    <div class="note">
+      <b>How a new customer is identified — the Email Anchor.</b> Every order-confirmation email that lands in depot@supplynow.org is parsed and its customer email is captured.
+      <ol>
+        <li><b>Capture</b> the customer email from the confirmation and treat it as the <b>Master ID</b> for that account.</li>
+        <li><b>Query</b> the full order history for that exact email (normalized) — an immediate duplicate check.</li>
+        <li><b>No match → first-time order</b>: it's a new customer, dated to this order.</li>
+        <li><b>Match found → returning</b>: the order attaches to the existing account, and its cadence/trend updates.</li>
+      </ol>
+      Everything on this page is computed live off that email-anchored order history — no manual tagging.
+    </div>
+  </div>
+  <div id="error" style="display:none;padding:40px 0;color:#ff6a5f"></div>
+</div>
+<script>
+var ENDPOINT='https://script.google.com/macros/s/AKfycbz4ial75YjPQODBlfOFZJJWeRDQn7MI9KT6UrfKUGkR1VAHhy7Ns07y1QT_tqfl2D1L/exec';
+var $=function(s){return document.querySelector(s);};
+function jsonp(url,cb){var s=document.createElement('script');var fn='__t'+Math.random().toString(36).slice(2);var to=setTimeout(function(){cb(null);},20000);window[fn]=function(d){clearTimeout(to);try{cb(d);}catch(e){}try{delete window[fn];}catch(_){}s.remove();};s.onerror=function(){clearTimeout(to);cb(null);s.remove();};s.src=url+(url.indexOf('?')<0?'?':'&')+'callback='+fn;document.head.appendChild(s);}
+function money(n){n=+n||0;return '$'+Math.round(n).toLocaleString();}
+function money2(n){n=+n||0;return '$'+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
+function niceD(iso){if(!iso)return '';var d=new Date(iso+'T00:00:00');return isNaN(d)?iso:d.toLocaleDateString('en-US',{month:'short',day:'numeric'});}
+function arrow(p){p=+p||0;if(p>0)return '<span class="up">▲ '+p+'%</span>';if(p<0)return '<span class="down">▼ '+Math.abs(p)+'%</span>';return '<span class="muted">0%</span>';}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+
+function render(d){
+  $('#loading').style.display='none'; $('#app').style.display='';
+  var s=d.summary;
+  $('#asof').textContent='as of '+niceD(d.asOf)+' · live from order confirmations';
+  var tiles=[
+    ['Revenue · 7d',money(s.spend7),arrow(s.spendWoW)+' WoW'],
+    ['Orders · 7d',s.orders7,arrow(s.ordersWoW)+' WoW'],
+    ['Revenue · 30d',money(s.spend30),arrow(s.spendMoM)+' MoM'],
+    ['New customers · 30d',s.newCustomers30,'<span class="up">'+s.newCustomers7+'</span> in last 7d'],
+    ['Won back · 30d',s.reactivated30,'reactivated'],
+    ['Active · 30d',s.activeCustomers30,'of '+s.totalCustomers+' total'],
+    ['Total customers',s.totalCustomers,'all-time by email']
+  ];
+  $('#kpis').innerHTML=tiles.map(function(t){return '<div class="kpi"><div class="v">'+t[1]+'</div><div class="l">'+t[0]+'</div><div class="d">'+t[2]+'</div></div>';}).join('');
+  $('#wonc').textContent=s.newCustomers30+' new · '+s.reactivated30+' won back';
+
+  // New customers
+  $('#newc').innerHTML = d.newCustomers.length? tbl(
+    ['Customer','First order','1st $','Since'],
+    d.newCustomers.slice(0,25).map(function(c){return [
+      '<div class="cn">'+esc(c.customer)+'</div><div class="sub">'+esc(c.email)+' · '+esc(c.location||'')+'</div>',
+      niceD(c.firstDate), money2(c.firstValue),
+      c.ordersSince+(c.ordersSince>1?' ord · '+money(c.spendSince):' ord')
+    ];}), [0,0,1,1]) : empty('No first-time orders in the last 30 days.');
+
+  // Won back
+  $('#won').innerHTML = d.won.length? tbl(
+    ['Customer','Returned','After gap','Order $'],
+    d.won.map(function(c){return [
+      '<div class="cn">'+esc(c.customer)+'</div><div class="sub">'+esc(c.location||'')+'</div>',
+      niceD(c.lastDate), '<span class="pos">'+c.gapDays+'d</span>', money2(c.value)
+    ];}),[0,0,1,1]) : empty('No win-backs detected in the last 30 days.');
+
+  // Trending up
+  $('#up').innerHTML = d.trendingUp.length? tbl(
+    ['Customer','Δ 30d','Now','Was'],
+    d.trendingUp.map(function(c){return [
+      '<div class="cn">'+esc(c.customer)+'</div><div class="sub">'+esc(c.location||'')+' · '+c.l30n+' ord/30d</div>',
+      '<span class="pos">+'+money(c.delta)+'</span>', money(c.l30), money(c.p30)
+    ];}),[0,1,1,1]) : empty('No accelerating accounts.');
+
+  // Trending down
+  $('#down').innerHTML = d.trendingDown.length? tbl(
+    ['Customer','Δ 30d','Now','Was'],
+    d.trendingDown.map(function(c){return [
+      '<div class="cn">'+esc(c.customer)+'</div><div class="sub">'+esc(c.location||'')+' · last '+niceD(c.last)+'</div>',
+      '<span class="neg">'+money(c.delta)+'</span>', money(c.l30), money(c.p30)
+    ];}),[0,1,1,1]) : empty('No slowing accounts.');
+
+  $('#loc').innerHTML = bars(d.byLocation, s.spend30);
+  $('#ful').innerHTML = bars(d.byFulfillment, s.spend30);
+}
+function tbl(head,rows,numCols){
+  var th=head.map(function(h,i){return '<th'+(numCols[i]?' class="num"':'')+'>'+h+'</th>';}).join('');
+  var tr=rows.map(function(r){return '<tr>'+r.map(function(c,i){return '<td'+(numCols[i]?' class="num"':'')+'>'+c+'</td>';}).join('')+'</tr>';}).join('');
+  return '<table><thead><tr>'+th+'</tr></thead><tbody>'+tr+'</tbody></table>';
+}
+function bars(arr,maxRef){
+  if(!arr||!arr.length)return empty('No data.');
+  var mx=Math.max.apply(null,arr.map(function(a){return a.l30;}).concat([1]));
+  return arr.map(function(a){
+    var w=Math.max(2,Math.round(a.l30/mx*100));
+    var col=a.deltaPct>=0?'linear-gradient(90deg,#137a4c,#3ddc9a)':'linear-gradient(90deg,#8a1f1f,#ff6a5f)';
+    return '<div class="bar"><div class="nm">'+esc(a.key)+'</div><div class="track"><span class="fill" style="width:'+w+'%;background:'+col+'"></span></div>'+
+      '<div class="vv">'+money(a.l30)+' &nbsp; '+arrow(a.deltaPct)+'</div></div>';
+  }).join('');
+}
+function empty(m){return '<div class="empty">'+m+'</div>';}
+
+function load(){
+  $('#loading').style.display=''; $('#app').style.display='none'; $('#error').style.display='none';
+  $('#loading').textContent='Loading live order data…';
+  jsonp(ENDPOINT+'?mode=trends&_='+Date.now(),function(d){
+    if(!d||!d.ok){ $('#loading').style.display='none'; $('#error').style.display=''; $('#error').textContent='Could not load live trends'+(d&&d.error?': '+d.error:'. Try Refresh.'); return; }
+    render(d);
+  });
+}
+$('#refresh').onclick=load;
+load();
+</script>
+</body>
+</html>
