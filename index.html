@@ -201,7 +201,7 @@ let OUTREACH_URL='';  // link to the shared Google Sheet
 function jsonp(url,cb){var s=document.createElement('script');var fn='__jp'+Math.random().toString(36).slice(2);window[fn]=function(d){try{cb(d);}catch(e){}try{delete window[fn];}catch(_){}try{s.remove();}catch(_){}};s.onerror=function(){try{delete window[fn];}catch(_){}try{s.remove();}catch(_){}};s.src=url+(url.indexOf('?')<0?'?':'&')+'callback='+fn;document.head.appendChild(s);}
 function outreachList(c){return (OUTREACH[c.id]||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));}
 function loadOutreach(){ if(!OUTREACH_ENDPOINT)return; jsonp(OUTREACH_ENDPOINT+'?mode=outreach_get',function(d){ if(!d||!d.ok||!d.rows)return; if(d.url)OUTREACH_URL=d.url; var m={}; d.rows.forEach(function(r){ if(!r.id||r.id==='TEST123'||/^ZZ_/i.test(r.id))return; (m[r.id]=m[r.id]||[]).push(r); }); OUTREACH=m; DATA.customers.forEach(function(c){ var rr=OUTREACH[c.id]; if(rr&&rr.length){ var latest=rr.reduce(function(x,y){return (y.date||'')>x?(y.date):x;},''); if(latest&&(!c.reached||latest>c.reached))c.reached=latest; } }); try{render();renderChurn();}catch(e){} }); }
-function logOutreach(c,channel,subject){ if(!OUTREACH_ENDPOINT||!c)return; var d=(c.reached||''); (OUTREACH[c.id]=OUTREACH[c.id]||[]).push({date:d,channel:channel||'email',subject:subject||'',ts:d,by:''}); var u=OUTREACH_ENDPOINT+'?mode=outreach_log&id='+encodeURIComponent(c.id)+'&name='+encodeURIComponent(c.name||'')+'&email='+encodeURIComponent(c.email||'')+'&date='+encodeURIComponent(d)+'&channel='+encodeURIComponent(channel||'email')+'&subject='+encodeURIComponent(subject||''); jsonp(u,function(){}); }
+function logOutreach(c,channel,subject,stage){ if(!OUTREACH_ENDPOINT||!c)return; var d=(c.reached||''); var st=stage?String(stage):''; (OUTREACH[c.id]=OUTREACH[c.id]||[]).push({date:d,channel:channel||'email',subject:subject||'',ts:d,by:'',stage:st}); var u=OUTREACH_ENDPOINT+'?mode=outreach_log&id='+encodeURIComponent(c.id)+'&name='+encodeURIComponent(c.name||'')+'&email='+encodeURIComponent(c.email||'')+'&date='+encodeURIComponent(d)+'&channel='+encodeURIComponent(channel||'email')+'&subject='+encodeURIComponent(subject||'')+'&stage='+encodeURIComponent(st); jsonp(u,function(){}); }
 function pushEnrich(cid){ if(!OUTREACH_ENDPOINT||!cid)return; var e=ENRICH[cid]||{}; var c=(DATA.customers.find(function(x){return x.id===cid;})||{}); var u=OUTREACH_ENDPOINT+'?mode=enrich_set&id='+encodeURIComponent(cid)+'&name='+encodeURIComponent(c.name||'')+'&email='+encodeURIComponent(e.email||'')+'&contact='+encodeURIComponent(e.contact||'')+'&phone='+encodeURIComponent(e.phone||'')+'&address='+encodeURIComponent(e.address||'')+'&notes='+encodeURIComponent(e.notes||''); jsonp(u,function(){}); }
 function loadEnrich(){ if(!OUTREACH_ENDPOINT)return; jsonp(OUTREACH_ENDPOINT+'?mode=enrich_get',function(d){ if(!d||!d.ok||!d.enrich)return; Object.keys(d.enrich).forEach(function(id){ var s=d.enrich[id]||{}; var clean={}; ['email','contact','phone','address','notes'].forEach(function(k){ if(s[k])clean[k]=s[k]; }); ENRICH[id]=Object.assign({}, ENRICH[id]||{}, clean); }); applyEnrich(); try{render();renderChurn();}catch(e){} }); }
 function saveEnrich(cid,obj){ENRICH[cid]=Object.assign(ENRICH[cid]||{},obj);
@@ -325,7 +325,7 @@ $('#churnrows').innerHTML=churn.map(c=>`<tr data-i="${DATA.customers.indexOf(c)}
  <td class="ft">${c.market||'—'}</td><td class="num"><b>${fmt$(c.total)}</b></td><td class="num">${c.orders}</td>
  <td class="ft">${c.last||'—'}</td><td class="num">${c.days_since_last==null?'—':c.days_since_last}</td>
  <td>${badge(c.status)}</td><td class="ft">${c.email||'<span style="color:#ff7b7b">add</span>'}</td>
- <td class="ft">${lastOut(c)?'<span class="tick">✓ '+lastOut(c).slice(5)+'</span>':'—'}</td>
+ <td class="ft">${lastOut(c)?'<span class="tick">✓ '+lastOut(c).slice(5)+'</span>':'—'}${(function(){var cs=cadenceState(c);if(cs.maxStage<=0)return '';if(cs.complete)return '<div style="color:var(--mut2);font-size:10px">cadence done</div>';return '<div style="color:var(--orange);font-size:10px">next: E'+cs.next+(cs.due?' '+cs.due.slice(5):'')+'</div>';})()}</td>
  <td><button class="btn" style="padding:5px 10px;font-size:11px" onclick="event.stopPropagation();openCompose(${DATA.customers.indexOf(c)})">✉ ${c.email?'Email':'Enrich'}</button></td></tr>`).join('');
 bindRows('#churnrows');}
 renderChurn();
@@ -341,6 +341,41 @@ $('#expEnrich').onclick=()=>{const ids=Object.keys(ENRICH);if(!ids.length){alert
 
 // ---------- COMPOSE / ENRICH ----------
 function niceDate(iso){if(!iso)return '';const d=new Date(iso+'T00:00:00');return isNaN(d)?iso:d.toLocaleDateString('en-US',{month:'long',day:'numeric'});}
+
+// ---------- 14-DAY EMAIL CADENCE (5 stages, dynamic per customer) ----------
+const SIG='Mike Cook\nSupplyNow · mike@supplynow.org · (216) 971-1766';
+function _greet(c){const ct=(c.contact||'').trim();return ct?`Hi ${ct},`:`Hi ${c.name} team,`;}
+function _last(c){return niceDate(c.last);}
+function _dsl(c){return c.days_since_last==null?'a while':c.days_since_last+' days';}
+function _art(w){return /^[aeiou]/i.test((w||'').trim())?'an':'a';}
+const CADENCE=[
+ {n:1,key:'opener',label:'Opener',day:1,gap:0,
+  subj:c=>`${c.name} — still running your Restaurant Depot orders?`,
+  body:c=>`${_greet(c)}\n\nReal quick — this is Mike with SupplyNow. I was going back through our ${c.market||'delivery'} accounts and saw it's been about ${_dsl(c)} since your last order${_last(c)?` (${_last(c)})`:''}. Over ${c.orders} order${c.orders===1?'':'s'} you were one of our steady stops, so I wanted to reach out myself.\n\nMost places that go quiet on us hit the same wall: the Restaurant Depot run eats half a day, or a pickup fell through at the wrong time.\n\nOne quick question — are you still sourcing from RD, or did something change on your end?\n\nAppreciate you,\n${SIG}`},
+ {n:2,key:'value',label:'Value-add',day:3,gap:2,
+  subj:c=>`Re: ${c.name} — still running your Restaurant Depot orders?`,
+  body:c=>`${_greet(c)}\n\nFollowing up on my note from a couple days ago — one thing worth mentioning: we run ${c.market||'your area'} on a set schedule now, so most orders drop next-day and you only pay for what actually ships. No membership run, no parking lot, no half-day gone.\n\nIf it's easier, just reply with the items you reorder most and I'll price a sample run so you can see the real number.\n\nMike\nSupplyNow · (216) 971-1766`},
+ {n:3,key:'proof',label:'Social proof',day:6,gap:3,
+  subj:c=>`How ${_art(c.market||'local')} ${c.market||'local'} kitchen got 3 hours a week back`,
+  body:c=>`${_greet(c)}\n\nSharing this because it might land: ${_art(c.market||'nearby')} ${c.market||'nearby'} spot on our route was making the Restaurant Depot trip 2–3 times a week — call it 3+ hours plus fuel. We took it over as a standing delivery. Same products, same pricing they'd get in-store, and they got the labor back for the line.\n\nThat's really all SupplyNow does — you order, we handle the depot and the drop. For an account your size (${fmt$(c.total)} with us historically), the time saved usually covers the delivery on its own.\n\nWorth a 10-minute look?\n\n${SIG}`},
+ {n:4,key:'objection',label:'Objection',day:10,gap:4,
+  subj:c=>`Quick gut-check, ${(c.contact||c.name)}`,
+  body:c=>`${_greet(c)}\n\nI'll keep this honest — when an account goes quiet, it's usually one of three things:\n\n• Timing — you're slammed and this isn't the week. Fair; tell me when and I'll circle back.\n• Price — not sure it beats going yourself. I'll put real numbers next to your own run so it's not a guess.\n• Fit — maybe your volume or items changed. Tell me what shifted and I'll be straight about whether we're still a match.\n\nWhich one's closest? Even a one-word reply helps me help you.\n\nMike\nSupplyNow · (216) 971-1766`},
+ {n:5,key:'breakup',label:'Break-up',day:14,gap:4,
+  subj:c=>`Should I close your SupplyNow file?`,
+  body:c=>`${_greet(c)}\n\nI don't want to keep landing in your inbox if the timing isn't right — so this is my last note for now.\n\nIf SupplyNow isn't a fit at the moment, no hard feelings; I'll leave your account open on our end so you can pick right back up whenever a Restaurant Depot run gets to be too much.\n\nAnd if you'd still like that pricing look, just reply "yes" and I'll take care of it.\n\nEither way, thank you for being part of SupplyNow${_last(c)?` — good serving you back in ${_last(c)}`:''}.\n\n${SIG}`}
+];
+function cadStage(n){return CADENCE[Math.max(0,Math.min(4,(n||1)-1))];}
+function cadenceState(c){
+ var list=(typeof outreachList==='function')?outreachList(c):[];   // newest-first
+ var staged=list.map(function(x){return parseInt(x.stage,10);}).filter(function(x){return x>=1&&x<=5;});
+ var maxStage=staged.length?Math.max.apply(null,staged):0;
+ var next=maxStage+1;                       // 6 => cadence complete
+ var lastDate=list.length?list[0].date:'';
+ var due='';
+ if(next<=5 && lastDate){ var g=cadStage(next).gap; var d=new Date(lastDate+'T00:00:00'); d.setDate(d.getDate()+g); due=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+ return {touches:list.length, maxStage:maxStage, next:next, complete:next>5, due:due, lastDate:lastDate};
+}
 function composeBody(c){
  const contact=(c.contact||'').trim();
  const greet=contact?`Hi ${contact},`:`Hi ${c.name} team,`;
@@ -365,6 +400,7 @@ function openCompose(i){
     <div><label>Phone</label><input id="cf_phone" value="${eatt(c.phone)}"></div>
     <div><label>Address</label><input id="cf_addr" value="${eatt(c.address)}"></div>
     <div class="full"><label>Notes / pain point <span class="muted" style="text-transform:none;letter-spacing:0">(internal — never emailed)</span></label><input id="cf_notes" placeholder="e.g. switched to competitor on price" value="${eatt(c.notes)}"></div>
+    <div class="full"><label>Email in the 14-day cadence <span class="muted" style="text-transform:none;letter-spacing:0" id="cf_cadnote"></span></label><div id="cf_stages" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px"></div></div>
     <div class="full"><label>Subject</label><input id="cf_subj" value="${eatt(subj)}"></div>
     <div class="full"><label>Message <span class="muted" style="text-transform:none;letter-spacing:0">— edit freely · <a href="#" id="cf_reset">reset to template</a></span></label><textarea id="cf_body"></textarea></div>
    </div>
@@ -375,14 +411,25 @@ function openCompose(i){
      <button class="btn" id="cf_save">Save enrichment</button>
      <span class="savemsg" id="cf_msg"></span>
    </div></div>`;
- $('#cf_body').value=composeBody(c);
- $('#cf_reset').onclick=e=>{e.preventDefault();$('#cf_body').value=composeBody({...c,contact:$('#cf_contact').value.trim()});};
+ const _cs=cadenceState(c); let curStage=_cs.complete?1:_cs.next; if(curStage<1||curStage>5)curStage=1;
+ const stageCust=()=>({...c,contact:$('#cf_contact').value.trim()});
+ function renderStages(){
+   $('#cf_stages').innerHTML=CADENCE.map(s=>`<button type="button" class="btn" data-n="${s.n}" style="padding:6px 10px;font-size:11px;${s.n===curStage?'background:var(--orange);color:#111;border-color:var(--orange);font-weight:700':''}">${s.n} · ${s.label}<span style="opacity:.55"> · D${s.day}</span></button>`).join('');
+   document.querySelectorAll('#cf_stages button').forEach(b=>b.onclick=()=>{curStage=+b.dataset.n;applyStage();});
+   let note; if(_cs.complete) note='full 5-email cadence sent — starting a fresh sequence at Email 1';
+   else if(_cs.maxStage>0) note=`Email ${_cs.maxStage} of 5 sent${_cs.lastDate?' ('+niceDate(_cs.lastDate)+')':''} · suggested next: Email ${_cs.next}${_cs.due?' — due '+niceDate(_cs.due):''}`;
+   else note='no outreach logged yet · start with Email 1 (Opener)';
+   $('#cf_cadnote').textContent='— '+note;
+ }
+ function applyStage(){const s=cadStage(curStage);const cc=stageCust();$('#cf_subj').value=s.subj(cc);$('#cf_body').value=s.body(cc);renderStages();}
+ applyStage();
+ $('#cf_reset').onclick=e=>{e.preventDefault();applyStage();};
  const collect=()=>({contact:$('#cf_contact').value.trim(),email:$('#cf_email').value.trim().toLowerCase(),phone:$('#cf_phone').value.trim(),address:$('#cf_addr').value.trim(),notes:$('#cf_notes').value.trim()});
  const persist=()=>{const v=collect();Object.assign(c,v);saveEnrich(c.id,v);pushEnrich(c.id);};
  const need=()=>{$('#cf_msg').style.color='#ff9b9b';$('#cf_msg').textContent='Add an email first';setTimeout(()=>$('#cf_msg').style.color='',1800);};
  $('#cf_save').onclick=()=>{persist();$('#cf_msg').textContent='Saved ✓';render();renderChurn();};
- $('#cf_gmail').onclick=()=>{persist();if(!c.email)return need();markReached(c);logOutreach(c,'email',$('#cf_subj').value);window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(c.email)}&su=${encodeURIComponent($('#cf_subj').value)}&body=${encodeURIComponent($('#cf_body').value)}`,'_blank');$('#cf_msg').textContent='Opened in Gmail ✓ · logged';render();renderChurn();};
- $('#cf_mailto').onclick=()=>{persist();if(!c.email)return need();markReached(c);logOutreach(c,'email',$('#cf_subj').value);window.location.href=`mailto:${c.email}?subject=${encodeURIComponent($('#cf_subj').value)}&body=${encodeURIComponent($('#cf_body').value)}`;render();renderChurn();};
+ $('#cf_gmail').onclick=()=>{persist();if(!c.email)return need();markReached(c);logOutreach(c,'email',$('#cf_subj').value,curStage);window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(c.email)}&su=${encodeURIComponent($('#cf_subj').value)}&body=${encodeURIComponent($('#cf_body').value)}`,'_blank');$('#cf_msg').textContent=`Opened in Gmail ✓ · logged Email ${curStage}`;render();renderChurn();};
+ $('#cf_mailto').onclick=()=>{persist();if(!c.email)return need();markReached(c);logOutreach(c,'email',$('#cf_subj').value,curStage);window.location.href=`mailto:${c.email}?subject=${encodeURIComponent($('#cf_subj').value)}&body=${encodeURIComponent($('#cf_body').value)}`;render();renderChurn();};
  $('#cf_copy').onclick=e=>copy($('#cf_body').value,e.target);
  $('#cov').classList.add('on');
 }
@@ -410,8 +457,8 @@ function openModal(i){const c=DATA.customers[i];
     <div>Address <b>${c.address||'—'}</b></div><div>Phone <b>${c.phone||'—'}</b></div>
     <div>First order <b>${c.first||'—'}</b></div><div>Last order <b>${c.last||'—'} ${c.days_since_last==null?'':'('+c.days_since_last+'d ago)'}</b></div></div>
    ${(function(){var L=outreachList(c);if(!L.length)return '';return `<div class="ct" style="font-size:11px;text-transform:uppercase;color:var(--mut);letter-spacing:.6px;margin-top:16px">Outreach history (${L.length})${OUTREACH_URL?` · <a href="${OUTREACH_URL}" target="_blank" style="text-transform:none;font-weight:600">open log ↗</a>`:''}</div>
-   <div class="tl"><table><thead><tr><th>Date</th><th>Channel</th><th>Subject</th></tr></thead><tbody>
-   ${L.map(o=>`<tr><td>${o.date||'—'}</td><td class="ft">${o.channel||'email'}</td><td class="ft">${(o.subject||'').replace(/</g,'&lt;')}</td></tr>`).join('')}</tbody></table></div>`;})()}
+   <div class="tl"><table><thead><tr><th>Date</th><th>Stage</th><th>Subject</th></tr></thead><tbody>
+   ${L.map(o=>`<tr><td>${o.date||'—'}</td><td class="ft">${o.stage?('Email '+o.stage+(cadStage(+o.stage)?' · '+cadStage(+o.stage).label:'')):(o.channel||'email')}</td><td class="ft">${(o.subject||'').replace(/</g,'&lt;')}</td></tr>`).join('')}</tbody></table></div>`;})()}
    ${allw.length&&ol.length?`<div class="ct" style="font-size:11px;text-transform:uppercase;color:var(--mut);letter-spacing:.6px">Weekly spend</div><div class="spark">${spark}</div>
    <div style="font-size:11px;color:var(--mut2)">Monthly: ${months.map(m=>`<span class="pill">${m}: ${fmt$(c.monthly[m])}</span>`).join('')}</div>`:''}
    ${ol.length?`<div class="ct" style="font-size:11px;text-transform:uppercase;color:var(--mut);letter-spacing:.6px;margin-top:16px">Order history (${ol.length})</div>
