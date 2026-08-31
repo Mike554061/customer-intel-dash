@@ -161,6 +161,12 @@ a{color:var(--blue)}
     <th data-k="status">Status</th><th data-k="last_contacted">Contacted</th>
   </tr></thead><tbody id="rows"></tbody></table>
 
+  <h2>🆕 New Customers <span class="cnt" id="ncnote">— first-time orders, last 30 days · live from order confirmations</span></h2>
+  <div class="card" style="padding:0;overflow:auto">
+    <div style="padding:14px;color:var(--mut)" id="newcustempty">Loading live new-customer feed…</div>
+    <table style="display:none" id="newcusttbl"><thead><tr><th>Customer</th><th>Market</th><th>First order</th><th class="num">1st $</th><th class="num">Orders since</th><th>Welcome</th></tr></thead><tbody id="newcustrows"></tbody></table>
+  </div>
+
   <h2>Churn Watch <span class="cnt">— at-risk, churned &amp; lost, ranked by revenue at risk</span></h2>
   <div class="controls" style="position:static">
     <span class="chip" id="riskchip"></span>
@@ -205,6 +211,36 @@ function loadOutreach(){ if(!OUTREACH_ENDPOINT)return; jsonp(OUTREACH_ENDPOINT+'
 function logOutreach(c,channel,subject,stage){ if(!OUTREACH_ENDPOINT||!c)return; var d=(c.reached||''); var st=stage?String(stage):''; (OUTREACH[c.id]=OUTREACH[c.id]||[]).push({date:d,channel:channel||'email',subject:subject||'',ts:d,by:'',stage:st}); var u=OUTREACH_ENDPOINT+'?mode=outreach_log&id='+encodeURIComponent(c.id)+'&name='+encodeURIComponent(c.name||'')+'&email='+encodeURIComponent(c.email||'')+'&date='+encodeURIComponent(d)+'&channel='+encodeURIComponent(channel||'email')+'&subject='+encodeURIComponent(subject||'')+'&stage='+encodeURIComponent(st); jsonp(u,function(){}); }
 function pushEnrich(cid){ if(!OUTREACH_ENDPOINT||!cid)return; var e=ENRICH[cid]||{}; var c=(DATA.customers.find(function(x){return x.id===cid;})||{}); var u=OUTREACH_ENDPOINT+'?mode=enrich_set&id='+encodeURIComponent(cid)+'&name='+encodeURIComponent(c.name||'')+'&email='+encodeURIComponent(e.email||'')+'&contact='+encodeURIComponent(e.contact||'')+'&phone='+encodeURIComponent(e.phone||'')+'&address='+encodeURIComponent(e.address||'')+'&notes='+encodeURIComponent(e.notes||''); jsonp(u,function(){}); }
 function loadEnrich(){ if(!OUTREACH_ENDPOINT)return; jsonp(OUTREACH_ENDPOINT+'?mode=enrich_get',function(d){ if(!d||!d.ok||!d.enrich)return; Object.keys(d.enrich).forEach(function(id){ var s=d.enrich[id]||{}; var clean={}; ['email','contact','phone','address','notes'].forEach(function(k){ if(s[k])clean[k]=s[k]; }); ENRICH[id]=Object.assign({}, ENRICH[id]||{}, clean); }); applyEnrich(); try{render();renderChurn();}catch(e){} }); }
+// ── Live New Customers (email-anchor first-timers) + welcome, from gate mode=trends ──
+function escH(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+function welcomeTemplate(nc){
+  var greet=nc.contact?('Hi '+nc.contact+','):('Hi '+nc.customer+' team,');
+  var loc=nc.location?(' for '+nc.location):'';
+  return {subject:'Welcome to SupplyNow, '+nc.customer,
+    body:greet+"\n\nMike here with SupplyNow — I saw your first order come through"+loc+", and I wanted to personally say thank you and welcome.\n\nQuick version of how we work: you order from Restaurant Depot like normal and we handle the run — pull, pack, and deliver (or have it ready for pickup). No membership trip, no half-day gone.\n\nA couple things that help:\n• Reorder anytime — just reply here or send your list and we'll get it on the schedule.\n• If anything about this first order wasn't perfect, tell me directly and I'll make it right.\n\nGlad to have you on board — looking forward to keeping your shelves stocked.\n\nMike Cook\nSupplyNow · mike@supplynow.org · (216) 971-1766"};
+}
+let TRENDS=null;
+function loadTrends(){ if(!OUTREACH_ENDPOINT)return; jsonp(OUTREACH_ENDPOINT+'?mode=trends',function(d){ if(!d||!d.ok)return; TRENDS=d; renderNewCust(); }); }
+function renderNewCust(){
+  var tb=document.getElementById('newcustrows'); if(!tb||!TRENDS)return;
+  var list=TRENDS.newCustomers||[];
+  var note=document.getElementById('ncnote'); if(note)note.textContent='— first-time orders, last 30 days · '+list.length+' · live from order confirmations';
+  var empty=document.getElementById('newcustempty'), tbl=document.getElementById('newcusttbl');
+  if(!list.length){ if(empty)empty.textContent='No first-time orders in the last 30 days.'; return; }
+  if(empty)empty.style.display='none'; if(tbl)tbl.style.display='';
+  tb.innerHTML=list.map(function(nc,i){ return '<tr>'
+    +'<td><div class="cn">'+escH(nc.customer)+'</div><div class="cmeta">'+escH(nc.email||'no email')+'</div></td>'
+    +'<td class="ft">'+escH(nc.location||'—')+'</td>'
+    +'<td class="ft">'+escH(nc.firstDate||'')+'</td>'
+    +'<td class="num"><b>'+fmt$(nc.firstValue)+'</b></td>'
+    +'<td class="num">'+(nc.ordersSince||1)+'</td>'
+    +'<td><button class="btn" style="padding:5px 10px;font-size:11px" data-i="'+i+'" data-act="wg">✉ Welcome</button> <button class="btn" style="padding:5px 10px;font-size:11px" data-i="'+i+'" data-act="wc">Copy</button></td>'
+    +'</tr>'; }).join('');
+  tb.querySelectorAll('button').forEach(function(b){ b.onclick=function(){ var nc=list[+b.dataset.i], w=welcomeTemplate(nc);
+    if(b.dataset.act==='wg'){ if(!nc.email){alert('No email captured on this order.');return;} window.open('https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(nc.email)+'&su='+encodeURIComponent(w.subject)+'&body='+encodeURIComponent(w.body),'_blank'); }
+    else { navigator.clipboard.writeText('Subject: '+w.subject+'\n\n'+w.body).then(function(){var o=b.textContent;b.textContent='✓ Copied';setTimeout(function(){b.textContent=o;},1500);}); }
+  };});
+}
 function saveEnrich(cid,obj){ENRICH[cid]=Object.assign(ENRICH[cid]||{},obj);
  LS(function(){localStorage.setItem('sn_enrich',JSON.stringify(ENRICH));});
  if(BACKEND){try{google.script.run.withFailureHandler(function(){}).saveEnrichment(cid,ENRICH[cid]);}catch(e){}}}
@@ -475,6 +511,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeM();closeC();}
 render();
 loadOutreach();
 loadEnrich();
+loadTrends();
 document.querySelector('#tbl thead th[data-k="total"]').innerHTML+='<span class="ar"> ▼</span>';
 [200,600,1200].forEach(t=>setTimeout(()=>map.invalidateSize(),t));
 window.addEventListener('resize',()=>map.invalidateSize());
